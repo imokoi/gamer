@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 axum = "0.5.17"
+once_cell = "1.16.0"
+serde = { version = "1.0.147", features = ["derive"] }
