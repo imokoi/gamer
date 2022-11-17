@@ -1,4 +1,3 @@
-use serde::Serialize;
 use std::{collections::HashMap, fmt::Debug};
 
 // Store is used to store the states of the game
@@ -11,26 +10,27 @@ pub trait MessageData: Debug {}
 
 // websocket messages
 #[derive(Debug)]
-pub struct WebsocketMessage {
+pub struct WebsocketMessage<T: MessageData> {
     pub code: usize,
-    pub message: Box<dyn MessageData>,
+    pub data: T,
 }
 
 type MessageCode = usize;
 
 pub struct Event {
     pub code: MessageCode,
-    pub handler: Box<dyn Fn(WebsocketMessage)>,
+    pub handler: Box<dyn Fn(Box<dyn MessageData>)>,
 }
 
 pub trait EventObserver {
-    fn on_event(&mut self, code: MessageCode, handler: Box<dyn Fn(WebsocketMessage)>);
+    fn on_event(&mut self, code: MessageCode, handler: Box<dyn Fn(Box<dyn MessageData>)>);
 }
 
 pub trait EventRunner {
-    fn run(&mut self, code: MessageCode, message: WebsocketMessage);
+    fn run_event(&mut self, code: MessageCode, message: Box<dyn MessageData>);
 }
 
+// gamer manager
 pub struct Gamer {
     pub events: HashMap<MessageCode, Event>,
 }
@@ -44,7 +44,7 @@ impl Gamer {
 }
 
 impl EventObserver for Gamer {
-    fn on_event(&mut self, code: MessageCode, handler: Box<dyn Fn(WebsocketMessage)>) {
+    fn on_event(&mut self, code: MessageCode, handler: Box<dyn Fn(Box<dyn MessageData>)>) {
         if let Some(event) = self.events.get(&code) {
             panic!("Event with code {} already exists", event.code);
         } else {
@@ -54,7 +54,7 @@ impl EventObserver for Gamer {
 }
 
 impl EventRunner for Gamer {
-    fn run(&mut self, code: MessageCode, message: WebsocketMessage) {
+    fn run_event(&mut self, code: MessageCode, message: Box<dyn MessageData>) {
         if let Some(event) = self.events.get(&code) {
             (event.handler)(message);
         }
