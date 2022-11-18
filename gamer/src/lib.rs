@@ -1,5 +1,10 @@
 use std::{collections::HashMap, fmt::Debug};
 
+use axum::{
+    extract::{ws::WebSocket, WebSocketUpgrade},
+    response::IntoResponse,
+};
+
 // Store is used to store the states of the game
 // it is a singleton and can be accessed from anywhere
 pub struct Store<S> {
@@ -16,14 +21,14 @@ pub struct WebsocketMessage<T: MessageData> {
 }
 
 type MessageCode = usize;
-
+type MessageHandler = Box<dyn Fn(Box<dyn MessageData>) + Send + Sync + 'static>;
 pub struct Event {
     pub code: MessageCode,
-    pub handler: Box<dyn Fn(Box<dyn MessageData>)>,
+    pub handler: MessageHandler,
 }
 
 pub trait EventObserver {
-    fn on_event(&mut self, code: MessageCode, handler: Box<dyn Fn(Box<dyn MessageData>)>);
+    fn on_event(&mut self, code: MessageCode, handler: MessageHandler);
 }
 
 pub trait EventRunner {
@@ -41,10 +46,12 @@ impl Gamer {
             events: HashMap::new(),
         }
     }
+
+    pub fn handle_websocket_message(&mut self, ws: WebSocket) {}
 }
 
 impl EventObserver for Gamer {
-    fn on_event(&mut self, code: MessageCode, handler: Box<dyn Fn(Box<dyn MessageData>)>) {
+    fn on_event(&mut self, code: MessageCode, handler: MessageHandler) {
         if let Some(event) = self.events.get(&code) {
             panic!("Event with code {} already exists", event.code);
         } else {
