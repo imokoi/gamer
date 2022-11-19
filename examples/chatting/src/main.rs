@@ -20,19 +20,17 @@ impl gamer::MessageData for ChattingMessage {
 async fn main() {
     let my_gamer = Arc::new(Mutex::new(Gamer::new()));
     my_gamer.lock().await.on_event(
-        1,
-        Box::new(|message: Box<dyn gamer::MessageData>| {
-            let my_message = message.as_any().downcast_ref::<ChattingMessage>().unwrap();
-            println!("Message: {:?}", my_message.message);
+        100,
+        Box::new(|data| {
+            let message: ChattingMessage = serde_json::from_str(&data).unwrap();
+            println!("message: {}", message.message);
         }),
     );
 
-    my_gamer.lock().await.run_event(
-        1,
-        Box::new(ChattingMessage {
-            message: "Hello".to_string(),
-        }),
-    );
+    // my_gamer
+    //     .lock()
+    //     .await
+    //     .run_event(1, String::from(r#"{"message": "hello"}"#));
 
     let app = Router::new()
         .route("/ws", get(handle_websocket))

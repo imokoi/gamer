@@ -26,7 +26,7 @@ pub struct WebsocketMessage {
 }
 
 type MessageCode = usize;
-type MessageHandler = Box<dyn Fn(Box<dyn MessageData>) + Send + Sync + 'static>;
+type MessageHandler = Box<dyn Fn(String) + Send + Sync + 'static>;
 pub struct Event {
     pub code: MessageCode,
     pub handler: MessageHandler,
@@ -37,7 +37,7 @@ pub trait EventObserver {
 }
 
 pub trait EventRunner {
-    fn run_event(&mut self, code: MessageCode, message: Box<dyn MessageData>);
+    fn run_event(&mut self, code: MessageCode, data: String);
 }
 
 // gamer manager
@@ -84,15 +84,12 @@ impl Gamer {
                     let websocket_message: serde_json::Value = serde_json::from_str(&text).unwrap();
                     println!("websocket message: {:?}", websocket_message);
                     let code_map = websocket_message.as_object().unwrap();
-                    println!("code map: {:?}", code_map);
                     let code = (*code_map).get("code").unwrap();
-                    println!("code: {:?}", code);
-                    let data = websocket_message
-                        .get("data")
-                        .unwrap()
-                        .as_str()
-                        .unwrap()
-                        .to_string();
+                    let message_code = usize::from_str_radix(code.as_str().unwrap(), 10).unwrap();
+                    let data = (*code_map).get("data").unwrap().to_string();
+                    println!("data: {:?}", data);
+                    gamer.lock().await.run_event(message_code, data);
+                    // let data = ;
                     // let message = WebsocketMessage { code, data };
                     // println!("received message: {:?}", message);
                     // match websocketMessage {
@@ -131,9 +128,11 @@ impl EventObserver for Gamer {
 }
 
 impl EventRunner for Gamer {
-    fn run_event(&mut self, code: MessageCode, message: Box<dyn MessageData>) {
+    fn run_event(&mut self, code: MessageCode, data: String) {
         if let Some(event) = self.events.get(&code) {
-            (event.handler)(message);
+            (event.handler)(data);
+        } else {
+            panic!("Event with code {} does not exist", code);
         }
     }
 }
