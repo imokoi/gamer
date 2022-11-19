@@ -1,9 +1,10 @@
 use axum::extract::ws::{Message, WebSocket};
 use futures::{sink::SinkExt, stream::StreamExt};
 use serde::{Deserialize, Serialize};
-use serde_json;
+use serde_json::{self, json};
 use std::any::Any;
-use std::{collections::HashMap, fmt::Debug, sync::Arc};
+use std::sync::Arc;
+use std::{collections::HashMap, fmt::Debug};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 
@@ -21,7 +22,7 @@ pub trait MessageData: Debug {
 #[derive(Debug)]
 pub struct WebsocketMessage {
     pub code: usize,
-    pub data: Box<dyn MessageData>,
+    pub data: String,
 }
 
 type MessageCode = usize;
@@ -80,17 +81,30 @@ impl Gamer {
             // handle messages from the client
             match message {
                 Message::Text(text) => {
-                    let websocketMessage = serde_json::from_str(&text);
-                    match websocketMessage {
-                        Ok(message) => {
-                            let code = message.code;
-                            let data = message.data;
-                            gamer.lock().await.run_event(code, data);
-                        }
-                        Err(e) => {
-                            println!("error: {}", e);
-                        }
-                    }
+                    let websocket_message: serde_json::Value = serde_json::from_str(&text).unwrap();
+                    println!("websocket message: {:?}", websocket_message);
+                    let code_map = websocket_message.as_object().unwrap();
+                    println!("code map: {:?}", code_map);
+                    let code = (*code_map).get("code").unwrap();
+                    println!("code: {:?}", code);
+                    let data = websocket_message
+                        .get("data")
+                        .unwrap()
+                        .as_str()
+                        .unwrap()
+                        .to_string();
+                    // let message = WebsocketMessage { code, data };
+                    // println!("received message: {:?}", message);
+                    // match websocketMessage {
+                    //     Ok(message) => {
+                    //         let code = message.code;
+                    //         let data = message.data;
+                    //         gamer.lock().await.run_event(code, data);
+                    //     }
+                    //     Err(e) => {
+                    //         println!("error: {}", e);
+                    //     }
+                    // }
                     sender.send(Message::Text(text)).await.unwrap();
                 }
                 Message::Pong(_) => {
