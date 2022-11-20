@@ -1,8 +1,6 @@
 use axum::extract::ws::{Message, WebSocket};
 use futures::{sink::SinkExt, stream::StreamExt};
-use serde::{Deserialize, Serialize};
-use serde_json::{self, json};
-use std::any::Any;
+use serde_json::{self};
 use std::sync::Arc;
 use std::{collections::HashMap, fmt::Debug};
 use tokio::sync::Mutex;
@@ -14,10 +12,6 @@ pub struct Store<S> {
     states: HashMap<String, S>,
 }
 
-pub trait MessageData: Debug {
-    fn as_any(&self) -> &dyn std::any::Any;
-}
-
 // websocket messages
 #[derive(Debug)]
 pub struct WebsocketMessage {
@@ -27,6 +21,7 @@ pub struct WebsocketMessage {
 
 type MessageCode = usize;
 type MessageHandler = Box<dyn Fn(String) + Send + Sync + 'static>;
+
 pub struct Event {
     pub code: MessageCode,
     pub handler: MessageHandler,
@@ -55,7 +50,7 @@ impl Gamer {
     pub async fn handle_websocket_message(gamer: Arc<Mutex<Gamer>>, ws: WebSocket) {
         let (tx, mut rx) = ws.split();
 
-        // send pint pong message
+        // after establishing the connection, send ping messages to the client
         let arc_tx = Arc::new(Mutex::new(tx));
         let ping_tx = arc_tx.clone();
         tokio::spawn(async move {
@@ -75,34 +70,52 @@ impl Gamer {
             }
         });
 
+        // handle the messages sent from clients
         let message_tx = arc_tx.clone();
         while let Some(Ok(message)) = rx.next().await {
             let mut sender = message_tx.lock().await;
             // handle messages from the client
             match message {
                 Message::Text(text) => {
-                    let websocket_message: serde_json::Value = serde_json::from_str(&text).unwrap();
+                    let maybe_websocket_message: Result<serde_json::Value, serde_json::Error> =
+                        serde_json::from_str(&text);
+
+                    let websocket_message = match maybe_websocket_message {
+                        Ok(message) => message,
+                        Err(e) => {
+                            let _ = sender
+                                .send(Message::Text(format!("invalid message: {}", e)))
+                                .await;
+                            return;
+                        }
+                    };
+
                     println!("websocket message: {:?}", websocket_message);
-                    let code_map = websocket_message.as_object().unwrap();
-                    let code = (*code_map).get("code").unwrap();
-                    let message_code = usize::from_str_radix(code.as_str().unwrap(), 10).unwrap();
-                    let data = (*code_map).get("data").unwrap().to_string();
-                    println!("data: {:?}", data);
-                    gamer.lock().await.run_event(message_code, data);
-                    // let data = ;
-                    // let message = WebsocketMessage { code, data };
-                    // println!("received message: {:?}", message);
-                    // match websocketMessage {
-                    //     Ok(message) => {
-                    //         let code = message.code;
-                    //         let data = message.data;
-                    //         gamer.lock().await.run_event(code, data);
-                    //     }
-                    //     Err(e) => {
-                    //         println!("error: {}", e);
-                    //     }
-                    // }
-                    sender.send(Message::Text(text)).await.unwrap();
+
+                    match websocket_message.as_object() {
+                        Some(message) => {
+                            let code = (*message)
+                                .get("code")
+                                .and_then(|v| v.as_u64())
+                                .map(|v| v as usize)
+                                .unwrap_or(0);
+
+                            let data = (*message)
+                                .get("data")
+                                .and_then(|v| v.as_str())
+                                .map(|v| v.to_string())
+                                .unwrap_or("".to_string());
+
+                            gamer.lock().await.run_event(code, data);
+                            sender.send(Message::Text(text)).await.ok();
+                        }
+                        None => {
+                            sender
+                                .send(Message::Text("invalid message".into()))
+                                .await
+                                .ok();
+                        }
+                    }
                 }
                 Message::Pong(_) => {
                     println!("received pong");

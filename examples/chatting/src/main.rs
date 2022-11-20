@@ -1,5 +1,5 @@
 use axum::{extract::WebSocketUpgrade, response::IntoResponse, routing::get, Extension, Router};
-use gamer::{EventObserver, EventRunner, Gamer};
+use gamer::{EventObserver, Gamer};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, sync::Arc};
 use tokio::sync::Mutex;
@@ -7,13 +7,6 @@ use tokio::sync::Mutex;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChattingMessage {
     pub message: String,
-}
-
-// change to a macro #[derive(MessageData)]
-impl gamer::MessageData for ChattingMessage {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 #[tokio::main]
